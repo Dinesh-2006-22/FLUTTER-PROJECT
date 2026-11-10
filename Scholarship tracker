@@ -1,0 +1,2175 @@
+// ============================================================================
+// Scholarship Tracker – Student Scholarship Management System
+// Single-file Flutter app (Material 3) – runs directly in DartPad (Flutter mode)
+// Uses only the Flutter SDK. No packages, no APIs, no database.
+// ============================================================================
+
+import 'package:flutter/material.dart';
+
+void main() => runApp(const ScholarshipTrackerApp());
+
+// ============================================================================
+// 1. THEME COLORS & CONSTANTS
+// ============================================================================
+
+const Color kBlue = Color(0xFF2563EB);
+const Color kPurple = Color(0xFF8B5CF6);
+const Color kLightPurple = Color(0xFFEDE9FE);
+const Color kBackground = Color(0xFFF5F7FF);
+const Color kTextDark = Color(0xFF1F2340);
+const Color kTextGrey = Color(0xFF6B7280);
+
+const Color kGreen = Color(0xFF16A34A);
+const Color kRed = Color(0xFFDC2626);
+const Color kAmber = Color(0xFFD97706);
+const Color kOrange = Color(0xFFEA580C);
+
+const List<String> kMonths = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+];
+
+const List<String> kCategories = [
+  'Merit',
+  'Need-Based',
+  'STEM',
+  'Sports',
+  'Minority',
+  'Research',
+];
+
+// ============================================================================
+// 2. DATA MODELS
+// ============================================================================
+
+/// All possible states of a scholarship application.
+enum ApplicationStatus { notApplied, applied, underReview, approved, rejected }
+
+/// Human readable label, color and icon for each status.
+extension ApplicationStatusX on ApplicationStatus {
+  String get label => switch (this) {
+        ApplicationStatus.notApplied => 'Not Applied',
+        ApplicationStatus.applied => 'Applied',
+        ApplicationStatus.underReview => 'Under Review',
+        ApplicationStatus.approved => 'Approved',
+        ApplicationStatus.rejected => 'Rejected',
+      };
+
+  Color get color => switch (this) {
+        ApplicationStatus.notApplied => const Color(0xFF6B7280),
+        ApplicationStatus.applied => kBlue,
+        ApplicationStatus.underReview => kAmber,
+        ApplicationStatus.approved => kGreen,
+        ApplicationStatus.rejected => kRed,
+      };
+
+  IconData get icon => switch (this) {
+        ApplicationStatus.notApplied => Icons.radio_button_unchecked,
+        ApplicationStatus.applied => Icons.send_rounded,
+        ApplicationStatus.underReview => Icons.hourglass_top_rounded,
+        ApplicationStatus.approved => Icons.check_circle_rounded,
+        ApplicationStatus.rejected => Icons.cancel_rounded,
+      };
+}
+
+/// A single scholarship. `status` is mutable so students can update it.
+class Scholarship {
+  final int id;
+  final String name;
+  final String organization;
+  final int amount;
+  final String eligibility;
+  final DateTime deadline;
+  final String description;
+  final String category;
+  ApplicationStatus status;
+
+  Scholarship({
+    required this.id,
+    required this.name,
+    required this.organization,
+    required this.amount,
+    required this.eligibility,
+    required this.deadline,
+    required this.description,
+    required this.category,
+    this.status = ApplicationStatus.notApplied,
+  });
+
+  /// Days remaining until the deadline (negative if already expired).
+  int get daysLeft {
+    final now = DateTime.now();
+    final today = DateTime.utc(now.year, now.month, now.day);
+    final due = DateTime.utc(deadline.year, deadline.month, deadline.day);
+    return due.difference(today).inDays;
+  }
+
+  bool get isExpired => daysLeft < 0;
+  bool get isApproaching => daysLeft >= 0 && daysLeft <= 7;
+}
+
+/// Student profile data (editable).
+class StudentProfile {
+  String name;
+  String email;
+  String course;
+  String college;
+  String year;
+
+  StudentProfile({
+    required this.name,
+    required this.email,
+    required this.course,
+    required this.college,
+    required this.year,
+  });
+}
+
+/// Sample data. Deadlines are relative to today so the app always looks fresh.
+List<Scholarship> buildSampleScholarships() {
+  final now = DateTime.now();
+  DateTime inDays(int n) => now.add(Duration(days: n));
+
+  return [
+    Scholarship(
+      id: 1,
+      name: 'National Merit Excellence Award',
+      organization: 'Education Excellence Foundation',
+      amount: 50000,
+      category: 'Merit',
+      eligibility:
+          'Minimum 85% in the last examination. Full-time undergraduate students only.',
+      deadline: inDays(20),
+      description:
+          'Recognizes outstanding academic achievers across the country. The award covers tuition fees and includes a mentoring program with industry professionals.',
+    ),
+    Scholarship(
+      id: 2,
+      name: 'Bright Future Need-Based Grant',
+      organization: 'Helping Hands Trust',
+      amount: 40000,
+      category: 'Need-Based',
+      eligibility: 'Annual family income below ₹3,00,000. Minimum 60% marks.',
+      deadline: inDays(5),
+      status: ApplicationStatus.applied,
+      description:
+          'Financial support for talented students from low-income families so that money never stands in the way of education.',
+    ),
+    Scholarship(
+      id: 3,
+      name: 'Women in STEM Scholarship',
+      organization: 'TechBridge Foundation',
+      amount: 75000,
+      category: 'STEM',
+      eligibility:
+          'Female students enrolled in Engineering, Science or Mathematics programs.',
+      deadline: inDays(12),
+      status: ApplicationStatus.underReview,
+      description:
+          'Encourages women to pursue careers in science and technology. Includes a laptop grant and an internship opportunity.',
+    ),
+    Scholarship(
+      id: 4,
+      name: 'Young Innovators Research Fellowship',
+      organization: 'National Science Council',
+      amount: 100000,
+      category: 'Research',
+      eligibility:
+          'Students in 3rd year or above with a project or research proposal.',
+      deadline: inDays(45),
+      description:
+          'Supports students who want to carry out original research. Fellows receive funding for materials, travel and conference participation.',
+    ),
+    Scholarship(
+      id: 5,
+      name: 'Sports Excellence Scholarship',
+      organization: 'Champions Sports Academy',
+      amount: 30000,
+      category: 'Sports',
+      eligibility:
+          'State or national level sports participation certificate required.',
+      deadline: inDays(3),
+      description:
+          'Helps student athletes balance academics and training by covering coaching fees, equipment and travel costs.',
+    ),
+    Scholarship(
+      id: 6,
+      name: 'Minority Community Scholarship',
+      organization: 'Unity Educational Society',
+      amount: 35000,
+      category: 'Minority',
+      eligibility:
+          'Students belonging to notified minority communities with 55% or more marks.',
+      deadline: inDays(30),
+      status: ApplicationStatus.approved,
+      description:
+          'Promotes equal access to higher education by supporting deserving students from minority communities.',
+    ),
+    Scholarship(
+      id: 7,
+      name: 'Digital India Coding Scholarship',
+      organization: 'CodeCraft Initiative',
+      amount: 25000,
+      category: 'STEM',
+      eligibility: 'Any student pursuing Computer Science or IT.',
+      deadline: inDays(-6),
+      description:
+          'A scholarship for aspiring developers that includes access to premium coding bootcamps and mentoring.',
+    ),
+    Scholarship(
+      id: 8,
+      name: 'First Generation Learner Award',
+      organization: 'Pathfinder Trust',
+      amount: 45000,
+      category: 'Need-Based',
+      eligibility: 'First person in the family to attend college.',
+      deadline: inDays(-15),
+      status: ApplicationStatus.rejected,
+      description:
+          'Supports students who are the first in their family to pursue higher education with tuition and books allowance.',
+    ),
+    Scholarship(
+      id: 9,
+      name: 'Academic Topper Scholarship',
+      organization: 'Scholars Alliance',
+      amount: 60000,
+      category: 'Merit',
+      eligibility: 'Top 5% of the class in the previous academic year.',
+      deadline: inDays(60),
+      description:
+          'Rewards the top performers of every department with a one-time cash award and a certificate of excellence.',
+    ),
+    Scholarship(
+      id: 10,
+      name: 'Green Earth Research Grant',
+      organization: 'Eco Future Foundation',
+      amount: 55000,
+      category: 'Research',
+      eligibility:
+          'Students working on projects related to environment or sustainability.',
+      deadline: inDays(9),
+      description:
+          'Funds student projects that find creative solutions to environmental problems such as waste, water and clean energy.',
+    ),
+  ];
+}
+
+// ============================================================================
+// 3. HELPER FUNCTIONS
+// ============================================================================
+
+String formatDate(DateTime d) => '${d.day} ${kMonths[d.month - 1]} ${d.year}';
+
+/// Formats 50000 as ₹50,000
+String formatAmount(int amount) {
+  final s = amount.toString();
+  final buffer = StringBuffer();
+  for (int i = 0; i < s.length; i++) {
+    if (i > 0 && (s.length - i) % 3 == 0) buffer.write(',');
+    buffer.write(s[i]);
+  }
+  return '₹$buffer';
+}
+
+String deadlineText(Scholarship s) {
+  final d = s.daysLeft;
+  if (d < 0) {
+    final ago = -d;
+    final unit = ago == 1 ? 'day' : 'days';
+    return 'Expired $ago $unit ago';
+  }
+  if (d == 0) return 'Due today';
+  if (d == 1) return '1 day left';
+  return '$d days left';
+}
+
+/// Color changes with urgency: grey (expired), red, orange, green.
+Color deadlineColor(Scholarship s) {
+  final d = s.daysLeft;
+  if (d < 0) return kTextGrey;
+  if (d <= 3) return kRed;
+  if (d <= 7) return kOrange;
+  return kGreen;
+}
+
+IconData categoryIcon(String category) {
+  switch (category) {
+    case 'Merit':
+      return Icons.emoji_events_rounded;
+    case 'Need-Based':
+      return Icons.favorite_rounded;
+    case 'STEM':
+      return Icons.science_rounded;
+    case 'Sports':
+      return Icons.sports_soccer_rounded;
+    case 'Minority':
+      return Icons.groups_rounded;
+    case 'Research':
+      return Icons.menu_book_rounded;
+    default:
+      return Icons.school_rounded;
+  }
+}
+
+String initialsOf(String name) {
+  final parts =
+      name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+  if (parts.isEmpty) return '?';
+  if (parts.length == 1) return parts[0][0].toUpperCase();
+  return (parts.first[0] + parts.last[0]).toUpperCase();
+}
+
+typedef StatusCallback = void Function(Scholarship s, ApplicationStatus st);
+typedef OpenCallback = Future<void> Function(Scholarship s);
+
+// ============================================================================
+// 4. APP ROOT
+// ============================================================================
+
+class ScholarshipTrackerApp extends StatelessWidget {
+  const ScholarshipTrackerApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Scholarship Tracker',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: kBlue,
+          primary: kBlue,
+          secondary: kPurple,
+        ),
+        scaffoldBackgroundColor: kBackground,
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Colors.white,
+          foregroundColor: kTextDark,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          surfaceTintColor: Colors.transparent,
+          centerTitle: false,
+          titleTextStyle: TextStyle(
+            color: kTextDark,
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        navigationBarTheme: const NavigationBarThemeData(
+          backgroundColor: Colors.white,
+          indicatorColor: kLightPurple,
+          surfaceTintColor: Colors.transparent,
+          elevation: 8,
+        ),
+      ),
+      home: const HomeShell(),
+    );
+  }
+}
+
+// ============================================================================
+// 5. HOME SHELL – holds the shared state and the bottom navigation bar
+// ============================================================================
+
+class HomeShell extends StatefulWidget {
+  const HomeShell({super.key});
+
+  @override
+  State<HomeShell> createState() => _HomeShellState();
+}
+
+class _HomeShellState extends State<HomeShell> {
+  int _index = 0;
+
+  // In-memory "database"
+  final List<Scholarship> _scholarships = buildSampleScholarships();
+  StudentProfile _profile = StudentProfile(
+    name: 'Aarav Sharma',
+    email: 'aarav.sharma@example.com',
+    course: 'B.Tech Computer Science',
+    college: 'Greenfield Institute of Technology',
+    year: '2nd Year',
+  );
+
+  static const List<String> _titles = [
+    'Dashboard',
+    'Scholarships',
+    'My Applications',
+    'Profile',
+  ];
+
+  /// Updates the status of a scholarship and refreshes every screen.
+  void _updateStatus(Scholarship s, ApplicationStatus status) {
+    setState(() => s.status = status);
+  }
+
+  /// Opens the details page for a scholarship.
+  Future<void> _openDetails(Scholarship s) async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => ScholarshipDetailPage(
+          scholarship: s,
+          onStatusChanged: _updateStatus,
+        ),
+      ),
+    );
+  }
+
+  /// Opens the full deadline management page.
+  void _openDeadlines() {
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => DeadlinesPage(
+          scholarships: _scholarships,
+          onOpen: _openDetails,
+        ),
+      ),
+    );
+  }
+
+  void _goTo(int index) => setState(() => _index = index);
+
+  @override
+  Widget build(BuildContext context) {
+    final pages = <Widget>[
+      DashboardPage(
+        scholarships: _scholarships,
+        profile: _profile,
+        onOpen: _openDetails,
+        onViewDeadlines: _openDeadlines,
+        onViewScholarships: () => _goTo(1),
+        onViewApplications: () => _goTo(2),
+      ),
+      ScholarshipsPage(
+        scholarships: _scholarships,
+        onOpen: _openDetails,
+      ),
+      ApplicationsPage(
+        scholarships: _scholarships,
+        onOpen: _openDetails,
+        onStatusChanged: _updateStatus,
+        onBrowse: () => _goTo(1),
+      ),
+      ProfilePage(
+        profile: _profile,
+        onSave: (p) => setState(() => _profile = p),
+      ),
+    ];
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(_titles[_index]),
+        actions: [
+          IconButton(
+            tooltip: 'All deadlines',
+            icon: const Icon(Icons.event_note_rounded, color: kBlue),
+            onPressed: _openDeadlines,
+          ),
+          const SizedBox(width: 4),
+        ],
+      ),
+      // Content is centered with a max width so it looks good on desktop too.
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 900),
+          child: IndexedStack(
+            index: _index,
+            sizing: StackFit.expand,
+            children: pages,
+          ),
+        ),
+      ),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _index,
+        onDestinationSelected: _goTo,
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.dashboard_outlined),
+            selectedIcon: Icon(Icons.dashboard, color: kBlue),
+            label: 'Dashboard',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.school_outlined),
+            selectedIcon: Icon(Icons.school, color: kBlue),
+            label: 'Scholarships',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.assignment_outlined),
+            selectedIcon: Icon(Icons.assignment, color: kBlue),
+            label: 'My Applications',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.person_outline),
+            selectedIcon: Icon(Icons.person, color: kBlue),
+            label: 'Profile',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// 6. REUSABLE WIDGETS
+// ============================================================================
+
+/// Rounded white card with a soft shadow and tap ripple.
+class AppCard extends StatelessWidget {
+  final Widget child;
+  final VoidCallback? onTap;
+  final Color color;
+  final EdgeInsetsGeometry padding;
+  final EdgeInsetsGeometry margin;
+
+  const AppCard({
+    super.key,
+    required this.child,
+    this.onTap,
+    this.color = Colors.white,
+    this.padding = const EdgeInsets.all(16),
+    this.margin = const EdgeInsets.only(bottom: 12),
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: margin,
+      child: Material(
+        color: color,
+        elevation: 2,
+        shadowColor: const Color(0x332563EB),
+        borderRadius: BorderRadius.circular(20),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(padding: padding, child: child),
+        ),
+      ),
+    );
+  }
+}
+
+/// Small rounded label with optional icon.
+class Pill extends StatelessWidget {
+  final String text;
+  final Color color;
+  final IconData? icon;
+
+  const Pill({super.key, required this.text, required this.color, this.icon});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withAlpha(30),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 14, color: color),
+            const SizedBox(width: 4),
+          ],
+          Flexible(
+            child: Text(
+              text,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: color,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Colored pill that shows an application status.
+class StatusChip extends StatelessWidget {
+  final ApplicationStatus status;
+  const StatusChip({super.key, required this.status});
+
+  @override
+  Widget build(BuildContext context) {
+    return Pill(text: status.label, color: status.color, icon: status.icon);
+  }
+}
+
+class SectionHeader extends StatelessWidget {
+  final String title;
+  final String? actionLabel;
+  final VoidCallback? onAction;
+
+  const SectionHeader({
+    super.key,
+    required this.title,
+    this.actionLabel,
+    this.onAction,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            title,
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: kTextDark,
+            ),
+          ),
+        ),
+        if (actionLabel != null)
+          TextButton(onPressed: onAction, child: Text(actionLabel!)),
+      ],
+    );
+  }
+}
+
+/// Label + icon + value row used on detail and profile pages.
+class InfoRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+
+  const InfoRow({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: kLightPurple,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, size: 20, color: kPurple),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(fontSize: 12, color: kTextGrey),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: kTextDark,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Message shown when a list has nothing to display.
+class EmptyState extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String message;
+  final String? actionLabel;
+  final VoidCallback? onAction;
+
+  const EmptyState({
+    super.key,
+    required this.icon,
+    required this.title,
+    required this.message,
+    this.actionLabel,
+    this.onAction,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: const BoxDecoration(
+                color: kLightPurple,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, size: 44, color: kPurple),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: kTextDark,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: kTextGrey),
+            ),
+            if (actionLabel != null) ...[
+              const SizedBox(height: 16),
+              FilledButton(onPressed: onAction, child: Text(actionLabel!)),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Horizontally scrolling row of selectable filter chips.
+class FilterChipRow extends StatelessWidget {
+  final List<String> options;
+  final String selected;
+  final ValueChanged<String> onSelected;
+
+  const FilterChipRow({
+    super.key,
+    required this.options,
+    required this.selected,
+    required this.onSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        children: [
+          for (final option in options)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: ChoiceChip(
+                label: Text(option),
+                selected: option == selected,
+                showCheckmark: false,
+                selectedColor: kBlue,
+                backgroundColor: Colors.white,
+                labelStyle: TextStyle(
+                  color: option == selected ? Colors.white : kTextDark,
+                  fontWeight: FontWeight.w600,
+                ),
+                side: BorderSide(
+                  color: option == selected
+                      ? kBlue
+                      : const Color(0xFFE5E7EB),
+                ),
+                onSelected: (_) => onSelected(option),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Dashboard statistic card.
+class StatCard extends StatelessWidget {
+  final String label;
+  final int value;
+  final IconData icon;
+  final Color color;
+  final VoidCallback? onTap;
+
+  const StatCard({
+    super.key,
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.color,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      margin: EdgeInsets.zero,
+      onTap: onTap,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: color.withAlpha(30),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: color, size: 22),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            '$value',
+            style: const TextStyle(
+              fontSize: 30,
+              fontWeight: FontWeight.bold,
+              color: kTextDark,
+            ),
+          ),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 13, color: kTextGrey),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Card used in the scholarship list.
+class ScholarshipCard extends StatelessWidget {
+  final Scholarship scholarship;
+  final VoidCallback onTap;
+
+  const ScholarshipCard({
+    super.key,
+    required this.scholarship,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final s = scholarship;
+    return AppCard(
+      onTap: onTap,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(
+                  color: kLightPurple,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(categoryIcon(s.category), color: kPurple),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      s.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: kTextDark,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      s.organization,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 12.5, color: kTextGrey),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                formatAmount(s.amount),
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                  color: kBlue,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              Pill(
+                text: s.category,
+                color: kPurple,
+                icon: categoryIcon(s.category),
+              ),
+              StatusChip(status: s.status),
+              Pill(
+                text: deadlineText(s),
+                color: deadlineColor(s),
+                icon: s.isApproaching
+                    ? Icons.warning_amber_rounded
+                    : Icons.schedule,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Compact row showing a deadline (date block + name + days left).
+class DeadlineTile extends StatelessWidget {
+  final Scholarship scholarship;
+  final VoidCallback onTap;
+
+  const DeadlineTile({
+    super.key,
+    required this.scholarship,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final s = scholarship;
+    final color = deadlineColor(s);
+
+    // Highlight approaching deadlines, grey out expired ones.
+    final Color background = s.isExpired
+        ? const Color(0xFFF3F4F6)
+        : s.isApproaching
+            ? const Color(0xFFFFF7ED)
+            : Colors.white;
+
+    return AppCard(
+      onTap: onTap,
+      color: background,
+      child: Row(
+        children: [
+          Container(
+            width: 54,
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            decoration: BoxDecoration(
+              color: color.withAlpha(30),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  kMonths[s.deadline.month - 1].toUpperCase(),
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: color,
+                  ),
+                ),
+                Text(
+                  '${s.deadline.day}',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: color,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  s.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: s.isExpired ? kTextGrey : kTextDark,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  s.organization,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 12, color: kTextGrey),
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Icon(
+                      s.isApproaching
+                          ? Icons.warning_amber_rounded
+                          : Icons.schedule,
+                      size: 14,
+                      color: color,
+                    ),
+                    const SizedBox(width: 4),
+                    Flexible(
+                      child: Text(
+                        deadlineText(s),
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: color,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const Icon(Icons.chevron_right, color: kTextGrey),
+        ],
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// 7. DASHBOARD PAGE
+// ============================================================================
+
+class DashboardPage extends StatelessWidget {
+  final List<Scholarship> scholarships;
+  final StudentProfile profile;
+  final OpenCallback onOpen;
+  final VoidCallback onViewDeadlines;
+  final VoidCallback onViewScholarships;
+  final VoidCallback onViewApplications;
+
+  const DashboardPage({
+    super.key,
+    required this.scholarships,
+    required this.profile,
+    required this.onOpen,
+    required this.onViewDeadlines,
+    required this.onViewScholarships,
+    required this.onViewApplications,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // Statistics are calculated from the live list, so they update dynamically.
+    final total = scholarships.length;
+    final applied = scholarships
+        .where((s) => s.status != ApplicationStatus.notApplied)
+        .length;
+    final pending = scholarships
+        .where((s) =>
+            s.status == ApplicationStatus.applied ||
+            s.status == ApplicationStatus.underReview)
+        .length;
+    final approved = scholarships
+        .where((s) => s.status == ApplicationStatus.approved)
+        .length;
+    final expiredCount = scholarships.where((s) => s.isExpired).length;
+
+    // Next deadlines (not expired), soonest first.
+    final upcoming = scholarships.where((s) => !s.isExpired).toList()
+      ..sort((a, b) => a.deadline.compareTo(b.deadline));
+
+    final firstName = profile.name.trim().split(' ').first;
+
+    final cards = <StatCard>[
+      StatCard(
+        label: 'Total Scholarships',
+        value: total,
+        icon: Icons.school_rounded,
+        color: kBlue,
+        onTap: onViewScholarships,
+      ),
+      StatCard(
+        label: 'Applied',
+        value: applied,
+        icon: Icons.send_rounded,
+        color: kPurple,
+        onTap: onViewApplications,
+      ),
+      StatCard(
+        label: 'Pending',
+        value: pending,
+        icon: Icons.hourglass_top_rounded,
+        color: kAmber,
+        onTap: onViewApplications,
+      ),
+      StatCard(
+        label: 'Approved',
+        value: approved,
+        icon: Icons.check_circle_rounded,
+        color: kGreen,
+        onTap: onViewApplications,
+      ),
+    ];
+
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        // Welcome banner
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [kBlue, kPurple],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x442563EB),
+                blurRadius: 16,
+                offset: Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Scholarship Tracker',
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Welcome back, $firstName!',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Discover scholarships, track your applications and never miss a deadline.',
+                      style: TextStyle(color: Colors.white, fontSize: 13.5),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Icon(
+                Icons.school_rounded,
+                size: 56,
+                color: Colors.white.withAlpha(110),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
+
+        // Statistic cards (2 columns on phones, 4 on wider screens)
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final columns = constraints.maxWidth >= 600 ? 4 : 2;
+            const gap = 12.0;
+            final itemWidth =
+                (constraints.maxWidth - gap * (columns - 1)) / columns;
+            return Wrap(
+              spacing: gap,
+              runSpacing: gap,
+              children: [
+                for (final c in cards) SizedBox(width: itemWidth, child: c),
+              ],
+            );
+          },
+        ),
+        const SizedBox(height: 24),
+
+        // Upcoming deadlines
+        SectionHeader(
+          title: 'Upcoming Deadlines',
+          actionLabel: 'View all',
+          onAction: onViewDeadlines,
+        ),
+        const SizedBox(height: 8),
+        if (upcoming.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 24),
+            child: Text(
+              'No upcoming deadlines right now.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: kTextGrey),
+            ),
+          )
+        else
+          for (final s in upcoming.take(4))
+            DeadlineTile(scholarship: s, onTap: () => onOpen(s)),
+        if (expiredCount > 0)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              '$expiredCount expired scholarship${expiredCount == 1 ? '' : 's'} – tap "View all" to see them.',
+              style: const TextStyle(fontSize: 12.5, color: kTextGrey),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+// ============================================================================
+// 8. SCHOLARSHIPS PAGE (search + category filter)
+// ============================================================================
+
+class ScholarshipsPage extends StatefulWidget {
+  final List<Scholarship> scholarships;
+  final OpenCallback onOpen;
+
+  const ScholarshipsPage({
+    super.key,
+    required this.scholarships,
+    required this.onOpen,
+  });
+
+  @override
+  State<ScholarshipsPage> createState() => _ScholarshipsPageState();
+}
+
+class _ScholarshipsPageState extends State<ScholarshipsPage> {
+  final TextEditingController _searchController = TextEditingController();
+  String _query = '';
+  String _category = 'All';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final q = _query.trim().toLowerCase();
+
+    // Apply search + category filters together.
+    final filtered = widget.scholarships.where((s) {
+      final matchesCategory = _category == 'All' || s.category == _category;
+      final matchesSearch = q.isEmpty ||
+          s.name.toLowerCase().contains(q) ||
+          s.organization.toLowerCase().contains(q);
+      return matchesCategory && matchesSearch;
+    }).toList();
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+          child: TextField(
+            controller: _searchController,
+            onChanged: (value) => setState(() => _query = value),
+            decoration: InputDecoration(
+              hintText: 'Search scholarships by name...',
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon: _query.isEmpty
+                  ? null
+                  : IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () {
+                        _searchController.clear();
+                        setState(() => _query = '');
+                      },
+                    ),
+              filled: true,
+              fillColor: Colors.white,
+              contentPadding: const EdgeInsets.symmetric(vertical: 14),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide.none,
+              ),
+            ),
+          ),
+        ),
+        FilterChipRow(
+          options: ['All', ...kCategories],
+          selected: _category,
+          onSelected: (c) => setState(() => _category = c),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              '${filtered.length} scholarship${filtered.length == 1 ? '' : 's'} found',
+              style: const TextStyle(color: kTextGrey, fontSize: 13),
+            ),
+          ),
+        ),
+        Expanded(
+          child: filtered.isEmpty
+              ? EmptyState(
+                  icon: Icons.search_off_rounded,
+                  title: 'No scholarships found',
+                  message: 'Try a different name or choose another category.',
+                  actionLabel: 'Clear filters',
+                  onAction: () {
+                    _searchController.clear();
+                    setState(() {
+                      _query = '';
+                      _category = 'All';
+                    });
+                  },
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  itemCount: filtered.length,
+                  itemBuilder: (context, index) {
+                    final s = filtered[index];
+                    return ScholarshipCard(
+                      scholarship: s,
+                      onTap: () => widget.onOpen(s),
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+}
+
+// ============================================================================
+// 9. SCHOLARSHIP DETAILS PAGE (Apply Now + status update)
+// ============================================================================
+
+class ScholarshipDetailPage extends StatefulWidget {
+  final Scholarship scholarship;
+  final StatusCallback onStatusChanged;
+
+  const ScholarshipDetailPage({
+    super.key,
+    required this.scholarship,
+    required this.onStatusChanged,
+  });
+
+  @override
+  State<ScholarshipDetailPage> createState() => _ScholarshipDetailPageState();
+}
+
+class _ScholarshipDetailPageState extends State<ScholarshipDetailPage> {
+  Scholarship get s => widget.scholarship;
+
+  /// Updates the shared state and rebuilds this page.
+  void _setStatus(ApplicationStatus status) {
+    widget.onStatusChanged(s, status);
+    setState(() {});
+  }
+
+  void _showMessage(String message, {SnackBarAction? action}) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          behavior: SnackBarBehavior.floating,
+          action: action,
+        ),
+      );
+  }
+
+  /// "Apply Now" marks the scholarship as Applied.
+  void _apply() {
+    _setStatus(ApplicationStatus.applied);
+    _showMessage(
+      'Application submitted for "${s.name}"',
+      action: SnackBarAction(
+        label: 'Undo',
+        onPressed: () {
+          if (mounted) _setStatus(ApplicationStatus.notApplied);
+        },
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final alreadyApplied = s.status != ApplicationStatus.notApplied;
+    final canApply = !alreadyApplied && !s.isExpired;
+    final String buttonLabel = alreadyApplied
+        ? 'Already Applied'
+        : s.isExpired
+            ? 'Deadline Passed'
+            : 'Apply Now';
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Scholarship Details')),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 800),
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              // Header
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [kBlue, kPurple],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Pill(
+                      text: s.category,
+                      color: Colors.white,
+                      icon: categoryIcon(s.category),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      s.name,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      s.organization,
+                      style: const TextStyle(color: Colors.white70),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      formatAmount(s.amount),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 32,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const Text(
+                      'Scholarship amount',
+                      style: TextStyle(color: Colors.white70, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Information card
+              AppCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: Text(
+                            'Current status',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: kTextDark,
+                            ),
+                          ),
+                        ),
+                        StatusChip(status: s.status),
+                      ],
+                    ),
+                    const Divider(height: 24),
+                    InfoRow(
+                      icon: Icons.event_rounded,
+                      label: 'Application deadline',
+                      value: '${formatDate(s.deadline)}  •  ${deadlineText(s)}',
+                    ),
+                    InfoRow(
+                      icon: categoryIcon(s.category),
+                      label: 'Category',
+                      value: s.category,
+                    ),
+                    InfoRow(
+                      icon: Icons.rule_rounded,
+                      label: 'Eligibility criteria',
+                      value: s.eligibility,
+                    ),
+                  ],
+                ),
+              ),
+
+              // Description card
+              AppCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Description',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: kTextDark,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      s.description,
+                      style: const TextStyle(
+                        color: kTextGrey,
+                        height: 1.5,
+                        fontSize: 14.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Apply Now button
+              FilledButton.icon(
+                onPressed: canApply ? _apply : null,
+                icon: Icon(alreadyApplied ? Icons.check : Icons.send_rounded),
+                label: Text(buttonLabel),
+                style: FilledButton.styleFrom(
+                  backgroundColor: kBlue,
+                  minimumSize: const Size.fromHeight(52),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Status editor
+              AppCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Update Application Status',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: kTextDark,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final st in ApplicationStatus.values)
+                          ChoiceChip(
+                            avatar: Icon(
+                              st.icon,
+                              size: 18,
+                              color: s.status == st ? Colors.white : st.color,
+                            ),
+                            label: Text(st.label),
+                            selected: s.status == st,
+                            showCheckmark: false,
+                            selectedColor: st.color,
+                            backgroundColor: Colors.white,
+                            labelStyle: TextStyle(
+                              color: s.status == st ? Colors.white : kTextDark,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            side: BorderSide(color: st.color.withAlpha(120)),
+                            onSelected: (_) {
+                              _setStatus(st);
+                              _showMessage('Status updated to ${st.label}');
+                            },
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// 10. MY APPLICATIONS PAGE (tracking)
+// ============================================================================
+
+class ApplicationsPage extends StatefulWidget {
+  final List<Scholarship> scholarships;
+  final OpenCallback onOpen;
+  final StatusCallback onStatusChanged;
+  final VoidCallback onBrowse;
+
+  const ApplicationsPage({
+    super.key,
+    required this.scholarships,
+    required this.onOpen,
+    required this.onStatusChanged,
+    required this.onBrowse,
+  });
+
+  @override
+  State<ApplicationsPage> createState() => _ApplicationsPageState();
+}
+
+class _ApplicationsPageState extends State<ApplicationsPage> {
+  String _filter = 'All';
+
+  @override
+  Widget build(BuildContext context) {
+    // Only scholarships the student has applied to.
+    final applied = widget.scholarships
+        .where((s) => s.status != ApplicationStatus.notApplied)
+        .toList();
+
+    final shown = _filter == 'All'
+        ? applied
+        : applied.where((s) => s.status.label == _filter).toList();
+
+    final options = <String>[
+      'All',
+      for (final st in ApplicationStatus.values)
+        if (st != ApplicationStatus.notApplied) st.label,
+    ];
+
+    return Column(
+      children: [
+        const SizedBox(height: 16),
+        FilterChipRow(
+          options: options,
+          selected: _filter,
+          onSelected: (f) => setState(() => _filter = f),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              '${shown.length} application${shown.length == 1 ? '' : 's'}',
+              style: const TextStyle(color: kTextGrey, fontSize: 13),
+            ),
+          ),
+        ),
+        Expanded(
+          child: shown.isEmpty
+              ? EmptyState(
+                  icon: Icons.assignment_outlined,
+                  title: applied.isEmpty
+                      ? 'No applications yet'
+                      : 'Nothing here',
+                  message: applied.isEmpty
+                      ? 'Open a scholarship and tap "Apply Now" to start tracking it.'
+                      : 'No applications with this status.',
+                  actionLabel: applied.isEmpty ? 'Browse Scholarships' : null,
+                  onAction: widget.onBrowse,
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  itemCount: shown.length,
+                  itemBuilder: (context, index) {
+                    final s = shown[index];
+                    return _ApplicationCard(
+                      scholarship: s,
+                      onTap: () => widget.onOpen(s),
+                      onStatusChanged: widget.onStatusChanged,
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ApplicationCard extends StatelessWidget {
+  final Scholarship scholarship;
+  final VoidCallback onTap;
+  final StatusCallback onStatusChanged;
+
+  const _ApplicationCard({
+    required this.scholarship,
+    required this.onTap,
+    required this.onStatusChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final s = scholarship;
+    return AppCard(
+      onTap: onTap,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(
+                  color: s.status.color.withAlpha(30),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(s.status.icon, color: s.status.color),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      s.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: kTextDark,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      s.organization,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 12.5, color: kTextGrey),
+                    ),
+                  ],
+                ),
+              ),
+              // Quick status editor
+              PopupMenuButton<ApplicationStatus>(
+                tooltip: 'Update status',
+                icon: const Icon(Icons.more_vert, color: kTextGrey),
+                onSelected: (st) => onStatusChanged(s, st),
+                itemBuilder: (context) => [
+                  for (final st in ApplicationStatus.values)
+                    PopupMenuItem<ApplicationStatus>(
+                      value: st,
+                      child: Row(
+                        children: [
+                          Icon(st.icon, color: st.color, size: 20),
+                          const SizedBox(width: 10),
+                          Text(st.label),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              StatusChip(status: s.status),
+              Pill(
+                text: formatAmount(s.amount),
+                color: kBlue,
+                icon: Icons.payments_rounded,
+              ),
+              Pill(
+                text: deadlineText(s),
+                color: deadlineColor(s),
+                icon: Icons.schedule,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// 11. DEADLINES PAGE (approaching / upcoming / expired)
+// ============================================================================
+
+class DeadlinesPage extends StatefulWidget {
+  final List<Scholarship> scholarships;
+  final OpenCallback onOpen;
+
+  const DeadlinesPage({
+    super.key,
+    required this.scholarships,
+    required this.onOpen,
+  });
+
+  @override
+  State<DeadlinesPage> createState() => _DeadlinesPageState();
+}
+
+class _DeadlinesPageState extends State<DeadlinesPage> {
+  Future<void> _open(Scholarship s) async {
+    await widget.onOpen(s);
+    if (mounted) setState(() {});
+  }
+
+  /// Builds a titled group of deadline tiles.
+  List<Widget> _section({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required Color color,
+    required List<Scholarship> items,
+  }) {
+    if (items.isEmpty) return <Widget>[];
+    return <Widget>[
+      Padding(
+        padding: const EdgeInsets.only(top: 8, bottom: 12),
+        child: Row(
+          children: [
+            Icon(icon, color: color),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.bold,
+                      color: kTextDark,
+                    ),
+                  ),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(fontSize: 12, color: kTextGrey),
+                  ),
+                ],
+              ),
+            ),
+            Pill(text: '${items.length}', color: color),
+          ],
+        ),
+      ),
+      for (final s in items)
+        DeadlineTile(scholarship: s, onTap: () => _open(s)),
+      const SizedBox(height: 8),
+    ];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final all = widget.scholarships;
+
+    final approaching = all.where((s) => s.isApproaching).toList()
+      ..sort((a, b) => a.deadline.compareTo(b.deadline));
+    final upcoming =
+        all.where((s) => !s.isExpired && !s.isApproaching).toList()
+          ..sort((a, b) => a.deadline.compareTo(b.deadline));
+    final expired = all.where((s) => s.isExpired).toList()
+      ..sort((a, b) => b.deadline.compareTo(a.deadline));
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Deadlines')),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 800),
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              ..._section(
+                title: 'Approaching Soon',
+                subtitle: 'Due within the next 7 days',
+                icon: Icons.warning_amber_rounded,
+                color: kOrange,
+                items: approaching,
+              ),
+              ..._section(
+                title: 'Upcoming',
+                subtitle: 'More than a week left',
+                icon: Icons.event_available_rounded,
+                color: kGreen,
+                items: upcoming,
+              ),
+              ..._section(
+                title: 'Expired',
+                subtitle: 'Deadline has passed',
+                icon: Icons.event_busy_rounded,
+                color: kTextGrey,
+                items: expired,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// 12. PROFILE PAGE (view + edit)
+// ============================================================================
+
+class ProfilePage extends StatefulWidget {
+  final StudentProfile profile;
+  final ValueChanged<StudentProfile> onSave;
+
+  const ProfilePage({super.key, required this.profile, required this.onSave});
+
+  @override
+  State<ProfilePage> createState() => _ProfilePageState();
+}
+
+class _ProfilePageState extends State<ProfilePage> {
+  bool _editing = false;
+
+  final TextEditingController _nameCtrl = TextEditingController();
+  final TextEditingController _emailCtrl = TextEditingController();
+  final TextEditingController _courseCtrl = TextEditingController();
+  final TextEditingController _collegeCtrl = TextEditingController();
+  final TextEditingController _yearCtrl = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadControllers();
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _emailCtrl.dispose();
+    _courseCtrl.dispose();
+    _collegeCtrl.dispose();
+    _yearCtrl.dispose();
+    super.dispose();
+  }
+
+  /// Copies the current profile into the text fields.
+  void _loadControllers() {
+    final p = widget.profile;
+    _nameCtrl.text = p.name;
+    _emailCtrl.text = p.email;
+    _courseCtrl.text = p.course;
+    _collegeCtrl.text = p.college;
+    _yearCtrl.text = p.year;
+  }
+
+  void _message(String text) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(content: Text(text), behavior: SnackBarBehavior.floating),
+      );
+  }
+
+  void _save() {
+    if (_nameCtrl.text.trim().isEmpty) {
+      _message('Name cannot be empty');
+      return;
+    }
+    if (!_emailCtrl.text.contains('@')) {
+      _message('Please enter a valid email address');
+      return;
+    }
+    widget.onSave(
+      StudentProfile(
+        name: _nameCtrl.text.trim(),
+        email: _emailCtrl.text.trim(),
+        course: _courseCtrl.text.trim(),
+        college: _collegeCtrl.text.trim(),
+        year: _yearCtrl.text.trim(),
+      ),
+    );
+    setState(() => _editing = false);
+    _message('Profile updated successfully');
+  }
+
+  Widget _field(String label, IconData icon, TextEditingController controller) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: TextField(
+        controller: controller,
+        decoration: InputDecoration(
+          labelText: label,
+          prefixIcon: Icon(icon, color: kPurple),
+          filled: true,
+          fillColor: kBackground,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: BorderSide.none,
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = widget.profile;
+
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        // Header with avatar
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [kBlue, kPurple],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(24),
+          ),
+          child: Column(
+            children: [
+              CircleAvatar(
+                radius: 40,
+                backgroundColor: Colors.white,
+                child: Text(
+                  initialsOf(p.name),
+                  style: const TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    color: kBlue,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                p.name,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '${p.course} • ${p.year}',
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white70),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        AppCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _editing ? 'Edit Profile' : 'Student Information',
+                      style: const TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.bold,
+                        color: kTextDark,
+                      ),
+                    ),
+                  ),
+                  if (!_editing)
+                    TextButton.icon(
+                      onPressed: () {
+                        _loadControllers();
+                        setState(() => _editing = true);
+                      },
+                      icon: const Icon(Icons.edit_rounded, size: 18),
+                      label: const Text('Edit'),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              if (_editing) ...[
+                _field('Full name', Icons.person_rounded, _nameCtrl),
+                _field('Email address', Icons.email_rounded, _emailCtrl),
+                _field('Course', Icons.menu_book_rounded, _courseCtrl),
+                _field('College name', Icons.apartment_rounded, _collegeCtrl),
+                _field('Academic year', Icons.calendar_month_rounded, _yearCtrl),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => setState(() => _editing = false),
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size.fromHeight(48),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                        child: const Text('Cancel'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: _save,
+                        icon: const Icon(Icons.save_rounded),
+                        label: const Text('Save'),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: kBlue,
+                          minimumSize: const Size.fromHeight(48),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ] else ...[
+                InfoRow(
+                  icon: Icons.person_rounded,
+                  label: 'Student name',
+                  value: p.name,
+                ),
+                InfoRow(
+                  icon: Icons.email_rounded,
+                  label: 'Email address',
+                  value: p.email,
+                ),
+                InfoRow(
+                  icon: Icons.menu_book_rounded,
+                  label: 'Course',
+                  value: p.course,
+                ),
+                InfoRow(
+                  icon: Icons.apartment_rounded,
+                  label: 'College name',
+                  value: p.college,
+                ),
+                InfoRow(
+                  icon: Icons.calendar_month_rounded,
+                  label: 'Academic year',
+                  value: p.year,
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
